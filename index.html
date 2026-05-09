@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Star Rhythm Festival</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=Montserrat:wght@900&display=swap');
+
+        body {
+            background: #000;
+            margin: 0;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+            font-family: 'Black Han Sans', sans-serif;
+        }
+
+        #game-container {
+            position: relative;
+            width: 800px;
+            height: 500px;
+            background: radial-gradient(circle at bottom, #1e1b4b 0%, #020617 100%);
+            border-radius: 20px;
+            box-shadow: 0 0 100px rgba(99, 102, 241, 0.3);
+            overflow: hidden;
+        }
+
+        /* 앙스타 느낌의 반원형 타겟 배치 */
+        .target-container {
+            position: absolute;
+            bottom: 40px;
+            width: 100%;
+            display: flex;
+            justify-content: center;
+            gap: 60px;
+            z-index: 10;
+        }
+
+        .target {
+            width: 70px;
+            height: 70px;
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 24px;
+            color: rgba(255, 255, 255, 0.5);
+            transition: all 0.1s;
+            background: rgba(255, 255, 255, 0.05);
+            box-shadow: 0 0 15px rgba(255, 255, 255, 0.1);
+        }
+
+        .target.active {
+            transform: scale(1.2);
+            border-color: #fff;
+            background: rgba(255, 255, 255, 0.2);
+            box-shadow: 0 0 30px #fff;
+            color: #fff;
+        }
+
+        /* 노트 스타일 */
+        .note {
+            position: absolute;
+            width: 50px;
+            height: 50px;
+            background: white;
+            border-radius: 50%;
+            filter: drop-shadow(0 0 10px #6366f1);
+            z-index: 5;
+        }
+
+        /* 판정 텍스트 */
+        #judge-display {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 60px;
+            font-weight: 900;
+            pointer-events: none;
+            z-index: 100;
+            opacity: 0;
+            font-family: 'Montserrat', sans-serif;
+            text-transform: uppercase;
+            letter-spacing: 5px;
+        }
+
+        /* 콤보 연출 */
+        #combo-display {
+            position: absolute;
+            top: 25%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            z-index: 50;
+        }
+
+        #combo-num {
+            font-size: 80px;
+            color: #fff;
+            text-shadow: 0 0 20px rgba(99, 102, 241, 0.8);
+            line-height: 1;
+        }
+
+        /* 파티클 효과 */
+        .particle {
+            position: absolute;
+            pointer-events: none;
+            background: white;
+            border-radius: 50%;
+            z-index: 100;
+        }
+
+        /* UI */
+        .score-box {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            font-size: 24px;
+            color: #fbbf24;
+        }
+
+        #overlay {
+            position: absolute;
+            inset: 0;
+            background: rgba(0,0,0,0.85);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 200;
+        }
+
+        /* 애니메이션 */
+        @keyframes pop {
+            0% { transform: translate(-50%, -50%) scale(0.5); opacity: 0; }
+            20% { transform: translate(-50%, -50%) scale(1.2); opacity: 1; }
+            100% { transform: translate(-50%, -50%) scale(1); opacity: 0; }
+        }
+
+        .animate-pop { animation: pop 0.4s ease-out forwards; }
+    </style>
+</head>
+<body>
+
+    <div id="game-container">
+        <div class="score-box">SCORE: <span id="score">0</span></div>
+        
+        <div id="combo-display">
+            <div id="combo-num"></div>
+            <div class="text-indigo-300 text-xl">COMBO</div>
+        </div>
+
+        <div id="judge-display">PERFECT</div>
+
+        <!-- 타겟 버튼 -->
+        <div class="target-container">
+            <div class="target" id="t-0">D</div>
+            <div class="target" id="t-1">F</div>
+            <div class="target" id="t-2">J</div>
+            <div class="target" id="t-3">K</div>
+        </div>
+
+        <!-- 스타트 화면 -->
+        <div id="overlay">
+            <h1 class="text-6xl font-black text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 via-pink-400 to-yellow-400 mb-8 italic">STAR RHYTHM</h1>
+            <button id="start-btn" class="bg-indigo-600 hover:bg-indigo-500 text-white px-12 py-4 rounded-full text-2xl font-bold shadow-2xl transition transform hover:scale-110">
+                STAGE START
+            </button>
+            <div class="mt-8 text-indigo-300 animate-pulse">Press [D] [F] [J] [K] to play</div>
+        </div>
+    </div>
+
+    <script>
+        const container = document.getElementById('game-container');
+        const startBtn = document.getElementById('start-btn');
+        const overlay = document.getElementById('overlay');
+        const judgeDisplay = document.getElementById('judge-display');
+        const scoreEl = document.getElementById('score');
+        const comboNumEl = document.getElementById('combo-num');
+
+        let isRunning = false;
+        let score = 0;
+        let combo = 0;
+        let notes = [];
+        const targets = [
+            { x: 230, y: 425 }, // D
+            { x: 340, y: 425 }, // F
+            { x: 460, y: 425 }, // J
+            { x: 570, y: 425 }  // K
+        ];
+        const keys = ['d', 'f', 'j', 'k'];
+
+        function createParticle(x, y, color) {
+            for (let i = 0; i < 12; i++) {
+                const p = document.createElement('div');
+                p.className = 'particle';
+                const size = Math.random() * 6 + 2;
+                p.style.width = size + 'px';
+                p.style.height = size + 'px';
+                p.style.left = x + 'px';
+                p.style.top = y + 'px';
+                p.style.background = color;
+                p.style.boxShadow = `0 0 10px ${color}`;
+                container.appendChild(p);
+
+                const angle = Math.random() * Math.PI * 2;
+                const speed = Math.random() * 6 + 2;
+                const vx = Math.cos(angle) * speed;
+                const vy = Math.sin(angle) * speed;
+
+                let opacity = 1;
+                const animateP = () => {
+                    const currX = parseFloat(p.style.left);
+                    const currY = parseFloat(p.style.top);
+                    p.style.left = (currX + vx) + 'px';
+                    p.style.top = (currY + vy) + 'px';
+                    opacity -= 0.03;
+                    p.style.opacity = opacity;
+
+                    if (opacity > 0) requestAnimationFrame(animateP);
+                    else p.remove();
+                };
+                requestAnimationFrame(animateP);
+            }
+        }
+
+        function spawnNote() {
+            if (!isRunning) return;
+            const lane = Math.floor(Math.random() * 4);
+            const target = targets[lane];
+            
+            const note = document.createElement('div');
+            note.className = 'note';
+            // 화면 중앙 상단에서 시작 (앙스타 느낌)
+            const startX = 400;
+            const startY = 100;
+            
+            note.style.left = startX + 'px';
+            note.style.top = startY + 'px';
+            note.style.background = `hsl(${Math.random() * 360}, 80%, 70%)`;
+            container.appendChild(note);
+
+            const noteObj = {
+                el: note,
+                lane: lane,
+                progress: 0,
+                speed: 0.005 + (Math.random() * 0.002),
+                startX: startX,
+                startY: startY,
+                endX: target.x - 25, // center correction
+                endY: target.y - 25,
+                hit: false
+            };
+            notes.push(noteObj);
+
+            setTimeout(spawnNote, 400 + Math.random() * 600);
+        }
+
+        function update() {
+            if (!isRunning) return;
+
+            for (let i = notes.length - 1; i >= 0; i--) {
+                const n = notes[i];
+                n.progress += n.speed;
+
+                // 포지션 계산 (중앙에서 타겟으로 퍼져나감)
+                const currX = n.startX + (n.endX - n.startX) * n.progress;
+                const currY = n.startY + (n.endY - n.startY) * n.progress;
+                const scale = 0.5 + n.progress * 1.5;
+
+                n.el.style.left = currX + 'px';
+                n.el.style.top = currY + 'px';
+                n.el.style.transform = `scale(${scale})`;
+
+                if (n.progress > 1.1) {
+                    if (!n.hit) {
+                        showJudge("MISS", "#ef4444");
+                        combo = 0;
+                        updateUI();
+                    }
+                    n.el.remove();
+                    notes.splice(i, 1);
+                }
+            }
+            requestAnimationFrame(update);
+        }
+
+        function showJudge(text, color) {
+            judgeDisplay.innerText = text;
+            judgeDisplay.style.color = color;
+            judgeDisplay.style.textShadow = `0 0 20px ${color}`;
+            judgeDisplay.classList.remove('animate-pop');
+            void judgeDisplay.offsetWidth;
+            judgeDisplay.classList.add('animate-pop');
+        }
+
+        function updateUI() {
+            scoreEl.innerText = score.toLocaleString();
+            comboNumEl.innerText = combo > 0 ? combo : "";
+            // 콤보가 높을수록 텍스트가 커지는 효과
+            comboNumEl.style.transform = `scale(${Math.min(1 + combo * 0.01, 1.5)})`;
+        }
+
+        function handleInput(index) {
+            const laneNotes = notes.filter(n => n.lane === index && !n.hit);
+            if (laneNotes.length === 0) return;
+
+            const n = laneNotes[0];
+            const dist = Math.abs(n.progress - 1.0);
+
+            let result = "";
+            let color = "";
+
+            if (dist < 0.05) {
+                result = "PERFECT";
+                color = "#fbbf24";
+                score += 500 + (combo * 10);
+                combo++;
+            } else if (dist < 0.12) {
+                result = "GREAT";
+                color = "#4ade80";
+                score += 300 + (combo * 5);
+                combo++;
+            } else if (dist < 0.2) {
+                result = "GOOD";
+                color = "#38bdf8";
+                score += 100;
+                combo++;
+            } else {
+                return;
+            }
+
+            n.hit = true;
+            n.el.remove();
+            createParticle(n.endX + 25, n.endY + 25, color);
+            showJudge(result, color);
+            updateUI();
+        }
+
+        // 입력 리스너
+        window.addEventListener('keydown', (e) => {
+            if (!isRunning) return;
+            const keyIdx = keys.indexOf(e.key.toLowerCase());
+            if (keyIdx !== -1) {
+                const targetEl = document.getElementById(`t-${keyIdx}`);
+                targetEl.classList.add('active');
+                handleInput(keyIdx);
+            }
+        });
+
+        window.addEventListener('keyup', (e) => {
+            const keyIdx = keys.indexOf(e.key.toLowerCase());
+            if (keyIdx !== -1) {
+                const targetEl = document.getElementById(`t-${keyIdx}`);
+                targetEl.classList.remove('active');
+            }
+        });
+
+        startBtn.addEventListener('click', () => {
+            overlay.style.display = 'none';
+            isRunning = true;
+            score = 0;
+            combo = 0;
+            notes = [];
+            updateUI();
+            update();
+            spawnNote();
+        });
+    </script>
+</body>
+</html>
